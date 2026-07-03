@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 管理者（Firebase Auth ログイン済み）
+    function isAdmin() {
+      return request.auth != null;
+    }
+
+    // ユーザー情報
+    // - 管理者: 読み書き可
+    // - LIFFユーザー: 自分のドキュメントのみ書き込み可（未認証でもLINEユーザーIDで識別）
+    match /users/{userId} {
+      allow read, write: if isAdmin();
+      allow read: if true; // LIFFからの完了状態確認を許可
+      allow create, update: if true; // LIFFからの書き込みを許可
+    }
+
+    // 会話・メッセージ（管理者のみ）
+    match /conversations/{userId}/messages/{messageId} {
+      allow read, write: if isAdmin();
+    }
+
+    // コンテンツ
+    // - 管理者: 読み書き可
+    // - 公開ページ(/p/[id])用: 公開済みコンテンツのみ読み取り可
+    match /contents/{contentId} {
+      allow read, write: if isAdmin();
+      allow read: if resource.data.status == 'published';
+    }
+
+    // セグメント（管理者のみ）
+    match /segments/{segmentId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 配信（管理者のみ）
+    match /broadcasts/{broadcastId} {
+      allow read, write: if isAdmin();
+    }
+
+    // オンボーディングフロー
+    // - 管理者: 読み書き可
+    // - LIFF: 読み取りのみ可（質問内容を取得するため）
+    match /onboarding_flows/{flowId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // タグマスター（管理者のみ）
+    match /tags/{tagId} {
+      allow read, write: if isAdmin();
+    }
+
+    // FAQ（管理者のみ書き込み、LINEからも読み取り可）
+    match /faqs/{faqId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // コンテンツ種別（管理者のみ書き込み、LINEからも読み取り可）
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // イベント（管理者のみ書き込み、公開済みのみ公開読み取り可）
+    match /events/{eventId} {
+      allow read, write: if isAdmin();
+      allow read: if resource.data.status == 'published';
+    }
+
+    // システム設定（管理者のみ）
+    match /settings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 管理者情報（管理者のみ）
+    match /admins/{adminId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
