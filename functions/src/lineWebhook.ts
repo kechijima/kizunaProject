@@ -119,7 +119,7 @@ function formatDate(ts: any): string {
 
 function buildEventBubble(d: FirebaseFirestore.QueryDocumentSnapshot): any {
   const ev = d.data()
-  const linkUrl = ev.linkUrl || 'https://www.coccopeer.com/'
+  const linkUrl = ev.linkUrl || 'https://kizuna-project-inc.com/'
   const bodyContents: any[] = [
     { type: 'text', text: '📅 イベント', size: 'xs', color: '#DC2626' },
     { type: 'text', text: ev.title, weight: 'bold', size: 'sm', wrap: true, color: '#333333', margin: 'sm' },
@@ -335,9 +335,9 @@ async function handlePostback(event: PostbackEvent, client: Client) {
         altText: '公式Webサイトはこちら',
         template: {
           type: 'buttons',
-          text: '🌐 こっこピアの公式Webサイトはこちらからどうぞ！',
+          text: '🌐 絆プロジェクトの公式Webサイトはこちらからどうぞ！',
           actions: [
-            { type: 'uri', label: 'Webサイトを開く', uri: 'https://www.coccopeer.com/' },
+            { type: 'uri', label: 'Webサイトを開く', uri: 'https://kizuna-project-inc.com/' },
           ],
         },
       })
@@ -356,6 +356,29 @@ async function handlePostback(event: PostbackEvent, client: Client) {
         text: '💬 ご相談を承りました！\nメッセージをお送りいただくと担当者が確認してご回答いたします😊\n\n少々お時間をいただく場合がありますが、お気軽にどうぞ！',
       })
       break
+
+    // 診断（オンボーディング質問フローの開始・再実行）
+    case 'diagnosis': {
+      const flow = await getActiveOnboardingFlow()
+      if (!flow || !(flow.steps?.length > 0)) {
+        await client.replyMessage(event.replyToken, {
+          type: 'text',
+          text: '📋 診断は現在準備中です。\nもうしばらくお待ちください🙏',
+        })
+        break
+      }
+      await db.collection('users').doc(lineUserId).set({
+        onboardingStatus: 'in_progress',
+        onboardingStep: 0,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true })
+      await client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '📋 あなたに合った支援情報をお届けするための診断を始めます！\nいくつかの質問にお答えください😊',
+      })
+      await sendNextOnboardingQuestion(client, lineUserId, flow, 0)
+      break
+    }
 
     // よくある質問
     case 'faq':
@@ -487,9 +510,9 @@ async function handleMessage(event: MessageEvent, client: Client) {
         altText: '公式Webサイトはこちら',
         template: {
           type: 'buttons',
-          text: '🌐 こっこピアの公式Webサイトはこちらからどうぞ！',
+          text: '🌐 絆プロジェクトの公式Webサイトはこちらからどうぞ！',
           actions: [
-            { type: 'uri', label: 'Webサイトを開く', uri: 'https://www.coccopeer.com/' },
+            { type: 'uri', label: 'Webサイトを開く', uri: 'https://kizuna-project-inc.com/' },
           ],
         },
       })

@@ -29,6 +29,15 @@ jobs:
       - name: Build Cloud Functions
         run: cd functions && npm run build
 
+      # ── Functions 環境変数ファイル生成（デプロイ時に読み込まれる） ──
+      - name: Create functions/.env
+        run: |
+          cat > functions/.env << EOF
+          LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }}
+          LINE_CHANNEL_ACCESS_TOKEN=${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LIFF_ID=${{ secrets.LIFF_ID }}
+          EOF
+
       # ── Nuxt 静的ビルド ───────────────────────────────────
       - name: Generate Nuxt static site
         run: npm run generate
