@@ -8,7 +8,7 @@
           <p class="text-sm text-peach-700 mt-1">
             リッチメニューの「診断」から利用できる質問を設定します。
             選択肢に紐づけたタグと、コンテンツに設定したタグが一致したものが診断結果としておすすめ表示されます。
-            回答はユーザーのタグ・属性としても保存され、セグメント配信に活用できます。
+            さらに選択肢ごとにポイントを設定でき、合計ポイントに応じてチャット相談・オンライン相談への案内メッセージをLINEに自動送信できます。
           </p>
         </div>
       </div>
@@ -79,7 +79,7 @@
 
           <!-- 選択肢設定 -->
           <div>
-            <p class="text-xs font-medium text-gray-500 mb-2">選択肢（→ 一致するタグを持つコンテンツが診断結果に表示されます）</p>
+            <p class="text-xs font-medium text-gray-500 mb-2">選択肢（タグ: 一致するコンテンツをおすすめ表示 / pt: 相談案内の判定に加算）</p>
             <div class="space-y-2">
               <div v-for="(opt, oi) in step.options ?? []" :key="oi" class="flex items-center gap-2">
                 <input
@@ -97,6 +97,16 @@
                   <option value="">→ タグなし</option>
                   <option v-for="t in masterTags" :key="t.id" :value="t.name">{{ t.name }}</option>
                 </select>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                  <input
+                    :value="step.pointMapping?.[opt] ?? 0"
+                    type="number"
+                    min="0"
+                    class="input text-sm py-1.5 w-16 text-right"
+                    @input="updatePointMapping(step, opt, ($event.target as HTMLInputElement).value)"
+                  />
+                  <span class="text-xs text-gray-400">pt</span>
+                </div>
                 <button @click="removeOption(step, oi)" class="text-gray-400 hover:text-red-400 flex-shrink-0">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -115,6 +125,71 @@
           <button @click="addStep" class="btn-secondary text-sm">
             ＋ 質問を追加
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 判定・案内設定 -->
+    <div class="card">
+      <h2 class="section-title">判定・案内設定（合計ポイントによる相談案内）</h2>
+      <p class="text-xs text-gray-500 mb-4">
+        診断完了時に、選択された選択肢のポイント合計で判定し、案内メッセージをLINEのトークに自動送信します。
+        オンライン相談のしきい値はチャット相談より大きい値にしてください（高い方が優先されます）。
+      </p>
+
+      <div class="space-y-4">
+        <!-- オンライン相談 -->
+        <div class="border border-gray-200 rounded-xl p-4 bg-warm-50">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="badge badge-peach">オンライン相談</span>
+            <div class="flex items-center gap-1 ml-auto">
+              <input v-model.number="flow.result.onlineThreshold" type="number" min="0" class="input text-sm py-1 w-20 text-right" />
+              <span class="text-xs text-gray-500">pt 以上</span>
+            </div>
+          </div>
+          <textarea
+            v-model="flow.result.onlineMessage"
+            rows="3"
+            class="input text-sm mb-2"
+            placeholder="案内メッセージ（例: 状況を詳しくお伺いしたいので、オンライン相談をご利用ください）"
+          />
+          <input
+            v-model="flow.result.onlineUrl"
+            type="text"
+            class="input text-sm"
+            placeholder="オンライン相談の予約URL（設定すると「予約する」ボタン付きで送信されます）"
+          />
+        </div>
+
+        <!-- チャット相談 -->
+        <div class="border border-gray-200 rounded-xl p-4 bg-warm-50">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="badge badge-blue">チャット相談</span>
+            <div class="flex items-center gap-1 ml-auto">
+              <input v-model.number="flow.result.chatThreshold" type="number" min="0" class="input text-sm py-1 w-20 text-right" />
+              <span class="text-xs text-gray-500">pt 以上</span>
+            </div>
+          </div>
+          <textarea
+            v-model="flow.result.chatMessage"
+            rows="3"
+            class="input text-sm"
+            placeholder="案内メッセージ（例: よろしければこのトークにそのままお悩みをお送りください。担当者がお答えします）"
+          />
+        </div>
+
+        <!-- しきい値未満 -->
+        <div class="border border-gray-200 rounded-xl p-4 bg-warm-50">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="badge badge-gray">しきい値未満</span>
+            <span class="text-xs text-gray-400 ml-auto">空欄の場合は送信されません</span>
+          </div>
+          <textarea
+            v-model="flow.result.defaultMessage"
+            rows="2"
+            class="input text-sm"
+            placeholder="案内メッセージ（例: 診断ありがとうございました！お届けした情報をぜひご覧ください）"
+          />
         </div>
       </div>
     </div>
@@ -158,6 +233,24 @@ const saving = ref(false)
 const masterTags = ref<{ id: string; name: string }[]>([])
 let flowId = ''
 
+type ResultConfig = {
+  onlineThreshold: number
+  onlineMessage: string
+  onlineUrl: string
+  chatThreshold: number
+  chatMessage: string
+  defaultMessage: string
+}
+
+const defaultResult = (): ResultConfig => ({
+  onlineThreshold: 6,
+  onlineMessage: '',
+  onlineUrl: '',
+  chatThreshold: 3,
+  chatMessage: '',
+  defaultMessage: '',
+})
+
 const flow = ref<{
   isActive: boolean
   steps: Array<{
@@ -167,7 +260,9 @@ const flow = ref<{
     options?: string[]
     attributeKey?: string
     tagMapping?: Record<string, string>
+    pointMapping?: Record<string, number>
   }>
+  result: ResultConfig
 }>({
   isActive: true,
   steps: [
@@ -183,8 +278,10 @@ const flow = ref<{
         '仕事のこと': '就労支援希望',
         'お金のこと': '経済支援希望',
       },
+      pointMapping: {},
     },
   ],
+  result: defaultResult(),
 })
 
 const addStep = () => {
@@ -224,12 +321,27 @@ const updateTagMapping = (step: any, opt: string, tag: string) => {
   }
 }
 
+const updatePointMapping = (step: any, opt: string, value: string) => {
+  if (!step.pointMapping) step.pointMapping = {}
+  const num = Number(value)
+  if (value !== '' && !Number.isNaN(num) && num !== 0) {
+    step.pointMapping[opt] = num
+  } else {
+    delete step.pointMapping[opt]
+  }
+}
+
 const saveFlow = async () => {
   saving.value = true
   try {
     const data = {
       isActive: flow.value.isActive,
       steps: flow.value.steps,
+      result: {
+        ...flow.value.result,
+        onlineThreshold: Number(flow.value.result.onlineThreshold) || 0,
+        chatThreshold: Number(flow.value.result.chatThreshold) || 0,
+      },
       updatedAt: serverTimestamp(),
     }
     if (flowId) {
@@ -260,6 +372,7 @@ onMounted(async () => {
     const data = d.data()
     flow.value.isActive = data.isActive ?? true
     if (data.steps?.length) flow.value.steps = data.steps
+    if (data.result) flow.value.result = { ...defaultResult(), ...data.result }
   }
 })
 </script>

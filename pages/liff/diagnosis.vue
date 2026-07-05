@@ -114,6 +114,20 @@
 
       <div class="flex-1 px-5 py-6 overflow-y-auto">
         <div class="max-w-sm mx-auto">
+          <!-- 相談への案内 -->
+          <div v-if="resultMessage" class="bg-peach-50 border-2 border-peach-200 rounded-xl p-4 mb-5">
+            <p class="text-sm text-gray-800 leading-relaxed whitespace-pre-line">{{ resultMessage }}</p>
+            <a
+              v-if="resultUrl"
+              :href="resultUrl"
+              target="_blank"
+              rel="noopener"
+              class="btn-primary w-full mt-3"
+            >
+              オンライン相談を予約する →
+            </a>
+          </div>
+
           <div v-if="recommended.length" class="space-y-3">
             <p class="text-sm text-gray-600 mb-4">
               🎉 あなたに合いそうな支援情報が <span class="font-bold text-peach-600">{{ recommended.length }}件</span> 見つかりました！
@@ -167,6 +181,7 @@ type Step = {
   options?: string[]
   attributeKey?: string
   tagMapping?: Record<string, string>
+  pointMapping?: Record<string, number>
 }
 
 const status = ref<'loading' | 'quiz' | 'result' | 'error'>('loading')
@@ -178,6 +193,9 @@ const answers = ref<string[][]>([])
 const selectedOptions = ref<string[]>([])
 const saving = ref(false)
 const recommended = ref<Array<{ id: string; title: string; category: string; excerpt: string; linkUrl: string }>>([])
+const resultConfig = ref<any>(null)
+const resultMessage = ref('')
+const resultUrl = ref('')
 
 const toggleOption = (opt: string) => {
   if (steps.value[currentStep.value]?.type === 'multi') {
@@ -209,24 +227,40 @@ const goNext = async () => {
 const finishDiagnosis = async () => {
   saving.value = true
   try {
-    // 回答からタグを判定
+    // 回答からタグ・ポイントを判定
     const diagnosedTags: string[] = []
     const attributes: Record<string, any> = {}
+    let score = 0
     steps.value.forEach((step, i) => {
       const ans = answers.value[i] ?? []
       for (const opt of ans) {
         const tag = step.tagMapping?.[opt]
         if (tag && !diagnosedTags.includes(tag)) diagnosedTags.push(tag)
+        score += Number(step.pointMapping?.[opt] ?? 0)
       }
       if (step.attributeKey) {
         attributes[`attributes.${step.attributeKey}`] = step.type === 'single' ? ans[0] ?? '' : ans
       }
     })
 
+    // 合計ポイントによる相談案内の判定（結果画面に表示。LINEへの送信はFunctions側が担当）
+    const rc = resultConfig.value
+    if (rc) {
+      if (rc.onlineMessage && score >= Number(rc.onlineThreshold ?? Infinity)) {
+        resultMessage.value = rc.onlineMessage
+        resultUrl.value = rc.onlineUrl ?? ''
+      } else if (rc.chatMessage && score >= Number(rc.chatThreshold ?? Infinity)) {
+        resultMessage.value = rc.chatMessage
+      } else if (rc.defaultMessage) {
+        resultMessage.value = rc.defaultMessage
+      }
+    }
+
     // ユーザーへ診断結果を保存（LINEログイン済みの場合のみ）
     if (lineUserId.value) {
       const updates: Record<string, any> = {
         ...attributes,
+        diagnosisScore: score,
         lastDiagnosisAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }
@@ -280,6 +314,7 @@ onMounted(async () => {
       return
     }
     steps.value = flowSnap.docs[0].data().steps
+    resultConfig.value = flowSnap.docs[0].data().result ?? null
 
     // LIFF SDK読み込み（LIFF外ブラウザでも診断自体は動作させる）
     const liffId = config.public.liffDiagnosisId as string
