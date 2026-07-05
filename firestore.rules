@@ -47,6 +47,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 診断フロー
+    // - 管理者: 読み書き可
+    // - LIFF: 読み取りのみ可（診断質問を取得するため）
+    match /diagnosis_flows/{flowId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // タグマスター（管理者のみ）
     match /tags/{tagId} {
       allow read, write: if isAdmin();

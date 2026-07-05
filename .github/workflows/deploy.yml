@@ -36,6 +36,7 @@ jobs:
           LINE_CHANNEL_SECRET=${{ secrets.LINE_CHANNEL_SECRET }}
           LINE_CHANNEL_ACCESS_TOKEN=${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LIFF_ID=${{ secrets.LIFF_ID }}
+          LIFF_DIAGNOSIS_ID=${{ secrets.LIFF_DIAGNOSIS_ID }}
           EOF
 
       # ── Nuxt 静的ビルド ───────────────────────────────────
@@ -50,6 +51,7 @@ jobs:
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
           LIFF_ID: ${{ secrets.LIFF_ID }}
           LIFF_PROFILE_ID: ${{ secrets.LIFF_PROFILE_ID }}
+          LIFF_DIAGNOSIS_ID: ${{ secrets.LIFF_DIAGNOSIS_ID }}
 
       # ── Firebase デプロイ（全リソース） ───────────────────
       - name: Deploy to Firebase

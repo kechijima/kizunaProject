@@ -32,6 +32,7 @@ export default defineNuxtConfig({
       firebaseAppId: process.env.FIREBASE_APP_ID,
       liffId: process.env.LIFF_ID,
       liffProfileId: process.env.LIFF_PROFILE_ID,
+      liffDiagnosisId: process.env.LIFF_DIAGNOSIS_ID,
     },
   },
   // Windows環境でVite IPC ソケットエラーが発生するため WebSocket HMR を使用

@@ -88,10 +88,10 @@ const richMenuBody = {
       bounds: { x: COL_W, y: 0, width: COL_W, height: ROW_H },
       action: { type: 'postback', label: '診断', data: 'action=diagnosis', displayText: '診断をはじめる' },
     },
-    // 上段右: 公式Webサイト
+    // 上段右: 公式Webサイト（直接遷移）
     {
       bounds: { x: COL_W * 2, y: 0, width: W - COL_W * 2, height: ROW_H },
-      action: { type: 'postback', label: '公式Webサイト', data: 'action=website', displayText: '公式Webサイト' },
+      action: { type: 'uri', label: '公式Webサイト', uri: 'https://kizuna-project-inc.com/' },
     },
     // 下段左: 質問・相談
     {

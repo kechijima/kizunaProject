@@ -55,16 +55,20 @@ async function sendNextOnboardingQuestion(client: Client, lineUserId: string, fl
 
 // ─── 支援情報カテゴリ検索 ────────────────────────
 
-async function handleCategorySearch(event: PostbackEvent, client: Client, category: string) {
-  const snap = await db.collection('contents')
-    .where('category', '==', category)
+async function handleCategorySearch(event: PostbackEvent, client: Client, category?: string) {
+  let contentsQuery: FirebaseFirestore.Query = db.collection('contents')
     .where('status', '==', 'published')
-    .limit(5).get()
+  if (category) {
+    contentsQuery = contentsQuery.where('category', '==', category)
+  }
+  const snap = await contentsQuery.limit(10).get()
 
   if (snap.empty) {
     await client.replyMessage(event.replyToken, {
       type: 'text',
-      text: `「${category}」の情報はまだ準備中です🙇\nほかのカテゴリもぜひご覧ください！`,
+      text: category
+        ? `「${category}」の情報はまだ準備中です🙇\nほかのカテゴリもぜひご覧ください！`
+        : '支援情報はまだ準備中です🙇\n公開までもうしばらくお待ちください！',
     })
     return
   }
@@ -103,7 +107,7 @@ async function handleCategorySearch(event: PostbackEvent, client: Client, catego
 
   await client.replyMessage(event.replyToken, {
     type: 'flex',
-    altText: `${category}の支援情報`,
+    altText: category ? `${category}の支援情報` : '支援情報',
     contents: { type: 'carousel', contents: bubbles },
   })
 }
@@ -285,29 +289,14 @@ async function handleFaq(event: PostbackEvent | MessageEvent, client: Client) {
 // ─── Postback（リッチメニューボタン） ───────────
 
 async function handlePostback(event: PostbackEvent, client: Client) {
-  const lineUserId = event.source.userId!
   const params = new URLSearchParams(event.postback.data)
   const action = params.get('action')
 
   switch (action) {
-    // 支援情報を探す → カテゴリ選択
-    case 'search': {
-      const catSnap = await db.collection('categories').orderBy('order', 'asc').get()
-      const catNames: string[] = catSnap.empty
-        ? ['子育て支援', '住居支援', '就労支援', '経済支援', '法律・権利', 'その他']
-        : catSnap.docs.map(d => d.data().name as string)
-      await client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: '🔍 どのカテゴリの情報をお探しですか？\n以下から選んでください👇',
-        quickReply: {
-          items: catNames.slice(0, 13).map(cat => ({
-            type: 'action' as const,
-            action: { type: 'postback' as const, label: cat.length > 20 ? cat.substring(0, 20) : cat, data: `action=search_cat&cat=${cat}`, displayText: cat },
-          })),
-        },
-      } as TextMessage)
+    // 支援情報を探す → 公開中のコンテンツを直接表示
+    case 'search':
+      await handleCategorySearch(event, client)
       break
-    }
 
     // カテゴリ確定 → 記事一覧（イベントは専用コレクション）
     case 'search_cat': {
@@ -343,40 +332,45 @@ async function handlePostback(event: PostbackEvent, client: Client) {
       })
       break
 
-    // 質問・相談
+    // 質問・相談（準備中）
     case 'consult':
-      await db.collection('conversations').doc(lineUserId)
-        .collection('messages').add({
-          text: '【質問・相談を希望しています】',
-          type: 'user',
-          timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        })
       await client.replyMessage(event.replyToken, {
         type: 'text',
-        text: '💬 ご相談を承りました！\nメッセージをお送りいただくと担当者が確認してご回答いたします😊\n\n少々お時間をいただく場合がありますが、お気軽にどうぞ！',
+        text: '💬 質問・相談機能は現在準備中です。\n公開までもうしばらくお待ちください🙏',
       })
       break
 
-    // 診断（オンボーディング質問フローの開始・再実行）
+    // 診断 → LIFF（コンテンツ診断画面）を案内
     case 'diagnosis': {
-      const flow = await getActiveOnboardingFlow()
-      if (!flow || !(flow.steps?.length > 0)) {
+      const liffDiagnosisId = process.env.LIFF_DIAGNOSIS_ID ?? ''
+      if (!liffDiagnosisId) {
         await client.replyMessage(event.replyToken, {
           type: 'text',
           text: '📋 診断は現在準備中です。\nもうしばらくお待ちください🙏',
         })
         break
       }
-      await db.collection('users').doc(lineUserId).set({
-        onboardingStatus: 'in_progress',
-        onboardingStep: 0,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true })
       await client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: '📋 あなたに合った支援情報をお届けするための診断を始めます！\nいくつかの質問にお答えください😊',
+        type: 'flex',
+        altText: 'あなたに必要な支援情報を診断します',
+        contents: {
+          type: 'bubble',
+          body: {
+            type: 'box', layout: 'vertical',
+            contents: [
+              { type: 'text', text: '📋 コンテンツ診断', weight: 'bold', size: 'md', color: '#DC2626' },
+              { type: 'text', text: 'いくつかの質問に答えると、あなたに必要な支援情報をご案内します（1分で完了）', size: 'sm', color: '#666666', wrap: true, margin: 'md' },
+            ],
+          },
+          footer: {
+            type: 'box', layout: 'vertical',
+            contents: [{
+              type: 'button', style: 'primary', color: '#DC2626',
+              action: { type: 'uri', label: '診断をはじめる →', uri: `https://liff.line.me/${liffDiagnosisId}` },
+            }],
+          },
+        },
       })
-      await sendNextOnboardingQuestion(client, lineUserId, flow, 0)
       break
     }
 
