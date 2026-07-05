@@ -293,10 +293,24 @@ async function handlePostback(event: PostbackEvent, client: Client) {
   const action = params.get('action')
 
   switch (action) {
-    // 支援情報を探す → 公開中のコンテンツを直接表示
-    case 'search':
-      await handleCategorySearch(event, client)
+    // 支援情報を探す → カテゴリ（種別管理）で絞り込み
+    case 'search': {
+      const catSnap = await db.collection('categories').orderBy('order', 'asc').get()
+      const catNames: string[] = catSnap.empty
+        ? ['子育て支援', '住居支援', '就労支援', '経済支援', '法律・権利', 'その他']
+        : catSnap.docs.map(d => d.data().name as string)
+      await client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '🔍 どのカテゴリの情報をお探しですか？\n以下から選んでください👇',
+        quickReply: {
+          items: catNames.slice(0, 13).map(cat => ({
+            type: 'action' as const,
+            action: { type: 'postback' as const, label: cat.length > 20 ? cat.substring(0, 20) : cat, data: `action=search_cat&cat=${cat}`, displayText: cat },
+          })),
+        },
+      } as TextMessage)
       break
+    }
 
     // カテゴリ確定 → 記事一覧（イベントは専用コレクション）
     case 'search_cat': {

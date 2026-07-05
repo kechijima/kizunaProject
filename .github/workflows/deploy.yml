@@ -9,6 +9,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # ── 必須シークレット検証（空のenvで本番Functionsを上書きしない） ──
+      - name: Verify required secrets
+        run: |
+          missing=""
+          [ -z "${{ secrets.LINE_CHANNEL_SECRET }}" ] && missing="$missing LINE_CHANNEL_SECRET"
+          [ -z "${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" ] && missing="$missing LINE_CHANNEL_ACCESS_TOKEN"
+          [ -z "${{ secrets.FIREBASE_TOKEN }}" ] && missing="$missing FIREBASE_TOKEN"
+          [ -z "${{ secrets.FIREBASE_API_KEY }}" ] && missing="$missing FIREBASE_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::GitHubシークレットが未設定のためデプロイを中止します:$missing"
+            exit 1
+          fi
+
       # ── ソースコード取得 ──────────────────────────────────
       - uses: actions/checkout@v4
 
