@@ -32,13 +32,13 @@ if (!TOKEN) {
 
 // ─── API ヘルパー ─────────────────────────────────
 
-function lineApi(method, endpoint, body, contentType = 'application/json') {
+function lineApi(method, endpoint, body, contentType = 'application/json', hostname = 'api.line.me') {
   return new Promise((resolve, reject) => {
     const bodyData = contentType === 'application/json'
       ? JSON.stringify(body)
       : body
     const options = {
-      hostname: 'api.line.me',
+      hostname,
       path: endpoint,
       method,
       headers: {
@@ -139,6 +139,7 @@ async function main() {
       `/v2/bot/richmenu/${richMenuId}/content`,
       imageData,
       contentType,
+      'api-data.line.me',
     )
     if (imgRes.status !== 200) {
       console.error('❌ 画像アップロード失敗:', imgRes.body)
