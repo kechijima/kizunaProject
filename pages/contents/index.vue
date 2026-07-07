@@ -61,7 +61,7 @@
         <h3 class="font-semibold text-gray-800 mb-2 line-clamp-2 group-hover:text-peach-600 transition-colors">
           {{ content.title }}
         </h3>
-        <p class="text-sm text-gray-500 line-clamp-2">{{ content.body }}</p>
+        <p class="text-sm text-gray-500 line-clamp-2">{{ stripHtml(content.body) }}</p>
 
         <div class="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
           <p class="text-xs text-gray-400">{{ formatDate(content.updatedAt) }}</p>
@@ -86,8 +86,7 @@ const { db } = useFirebase()
 const loading = ref(true)
 const contents = ref<any[]>([])
 const categoryFilter = ref('')
-
-const categories = ['子育て支援', '住居支援', '就労支援', '経済支援', '法律・権利', 'その他']
+const categories = ref<string[]>([])
 
 const filteredContents = computed(() => {
   if (!categoryFilter.value) return contents.value
@@ -102,6 +101,8 @@ const categoryIcon = (cat: string) => ({
   '法律・権利': '⚖️',
   'その他': '📋',
 }[cat] ?? '📝')
+
+const stripHtml = (html: string) => String(html ?? '').replace(/<[^>]*>/g, '')
 
 const formatDate = (ts: any) => {
   if (!ts) return '-'
@@ -118,6 +119,15 @@ onMounted(() => {
   onSnapshot(q, (snap) => {
     contents.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
     loading.value = false
+  })
+
+  // 種別管理（categories）の内容をタブに反映（リアルタイム同期・イベントは除く）
+  const catQ = query(collection(db, 'categories'), orderBy('order', 'asc'))
+  onSnapshot(catQ, (snap) => {
+    const names = snap.empty
+      ? ['子育て支援', '住居支援', '就労支援', '経済支援', '法律・権利', 'その他']
+      : snap.docs.map(d => (d.data() as any).name as string)
+    categories.value = names.filter(name => name !== 'イベント')
   })
 })
 </script>

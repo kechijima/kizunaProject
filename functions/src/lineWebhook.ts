@@ -130,7 +130,6 @@ function buildEventBubble(d: FirebaseFirestore.QueryDocumentSnapshot): any {
     { type: 'text', text: `🗓 ${formatDate(ev.startAt)}`, size: 'xs', color: '#666666', margin: 'sm' },
   ]
   if (ev.location) bodyContents.push({ type: 'text', text: `📍 ${ev.location}`, size: 'xs', color: '#666666', margin: 'xs' })
-  if (ev.targetChildren?.length) bodyContents.push({ type: 'text', text: `👶 対象: お子様${(ev.targetChildren as string[]).join('・')}`, size: 'xs', color: '#888888', margin: 'xs' })
   if (ev.description) bodyContents.push({ type: 'text', text: (ev.description as string).substring(0, 60) + '…', size: 'xs', wrap: true, color: '#888888', margin: 'sm' })
   return {
     type: 'bubble', size: 'kilo',
@@ -145,15 +144,12 @@ function buildEventBubble(d: FirebaseFirestore.QueryDocumentSnapshot): any {
 async function handleEventSearch(
   event: PostbackEvent | MessageEvent,
   client: Client,
-  filters: { location?: string; kids?: string } = {},
+  filters: { location?: string } = {},
 ) {
   const now = new Date()
 
   // フィルター説明テキスト
-  const filterDesc = [
-    filters.location ? `📍 ${filters.location}` : '',
-    filters.kids ? `👶 お子様${filters.kids}` : '',
-  ].filter(Boolean).join(' / ')
+  const filterDesc = filters.location ? `📍 ${filters.location}` : ''
 
   let upcoming: FirebaseFirestore.QueryDocumentSnapshot[] = []
   let allPublishedDocs: FirebaseFirestore.QueryDocumentSnapshot[] = []
@@ -173,7 +169,6 @@ async function handleEventSearch(
       const s = ev.startAt?.toDate?.()
       if (s && s < now) return false                                          // 過去イベント除外
       if (filters.location && ev.location !== filters.location) return false  // 場所フィルター
-      if (filters.kids && !(ev.targetChildren ?? []).includes(filters.kids)) return false // 人数フィルター
       return true
     }).slice(0, 5)
   } catch (err) {
@@ -216,16 +211,8 @@ async function handleEventSearch(
     }))
   }
 
-  // 子供の人数で絞る
-  if (!filters.kids) {
-    ['1人', '2人', '3人以上'].forEach(kids => filterItems.push({
-      type: 'action',
-      action: { type: 'postback', label: `👶 ${kids}`, data: `action=event_filter&kids=${encodeURIComponent(kids)}`, displayText: `お子様${kids}で絞込` },
-    }))
-  }
-
   // フィルターリセット
-  if (filters.location || filters.kids) {
+  if (filters.location) {
     filterItems.push({
       type: 'action',
       action: { type: 'postback', label: '🔄 絞込をリセット', data: 'action=event_filter', displayText: 'すべてのイベントを見る' },
@@ -327,7 +314,6 @@ async function handlePostback(event: PostbackEvent, client: Client) {
     case 'event_filter':
       await handleEventSearch(event, client, {
         location: params.get('loc') ? decodeURIComponent(params.get('loc')!) : undefined,
-        kids: params.get('kids') ? decodeURIComponent(params.get('kids')!) : undefined,
       })
       break
 

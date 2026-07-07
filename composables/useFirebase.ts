@@ -1,5 +1,6 @@
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getStorage } from 'firebase/storage'
 import { getApps } from 'firebase/app'
 
 export const useFirebase = () => {
@@ -7,5 +8,6 @@ export const useFirebase = () => {
   return {
     auth: nuxtApp.$auth as ReturnType<typeof getAuth>,
     db: nuxtApp.$db as ReturnType<typeof getFirestore>,
+    storage: nuxtApp.$storage as ReturnType<typeof getStorage>,
   }
 }

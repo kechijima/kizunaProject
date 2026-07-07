@@ -32,27 +32,35 @@
 
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1.5">本文 <span class="text-red-400">*</span></label>
-        <textarea v-model="form.body" class="input resize-none" rows="8" placeholder="コンテンツの内容を入力..." />
+        <RichTextEditor v-model="form.body" placeholder="コンテンツの内容を入力..." />
       </div>
 
-      <!-- リンクURL -->
+      <!-- 公開URL（自動生成） -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">リンクURL</label>
-        <div v-if="publicUrl && !form.linkUrl" class="flex items-center gap-2 p-3 bg-peach-50 rounded-xl border border-peach-100 mb-2">
-          <span class="text-xs text-peach-600 flex-1 truncate">🔗 {{ publicUrl }}</span>
-          <span class="text-xs text-peach-400">保存後に自動設定</span>
+        <label class="block text-sm font-medium text-gray-700 mb-1.5">公開URL</label>
+        <div v-if="isNew" class="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100">
+          <span class="text-xs text-gray-400">保存すると自動でURLが発行されます</span>
         </div>
-        <input v-model="form.linkUrl" type="url" class="input" placeholder="https://... （空欄の場合は自動生成）" />
-        <p v-if="form.linkUrl" class="text-xs text-gray-400 mt-1">
-          <a :href="form.linkUrl" target="_blank" class="text-peach-500 underline">{{ form.linkUrl }}</a>
-        </p>
+        <div v-else class="flex items-center gap-2 p-3 bg-peach-50 rounded-xl border border-peach-100">
+          <span class="text-sm text-peach-600 flex-1 truncate">🔗 {{ publicUrl }}</span>
+          <a :href="publicUrl" target="_blank" class="btn-ghost text-xs px-2 py-1 text-gray-500 hover:text-peach-600">開く</a>
+          <button type="button" @click="copyUrl" class="btn-secondary text-xs px-3 py-1 whitespace-nowrap">
+            {{ copied ? '✓ コピー済' : '📋 コピー' }}
+          </button>
+        </div>
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">画像URL</label>
-        <input v-model="form.imageUrl" type="url" class="input" placeholder="https://..." />
-        <div v-if="form.imageUrl" class="mt-2 h-32 rounded-xl overflow-hidden bg-gray-100">
-          <img :src="form.imageUrl" class="w-full h-full object-cover" alt="" />
+        <label class="block text-sm font-medium text-gray-700 mb-1.5">サムネイル画像</label>
+        <div class="flex gap-2">
+          <input v-model="form.imageUrl" type="url" class="input flex-1" placeholder="https://... または右のボタンからアップロード" />
+          <button type="button" @click="thumbInput?.click()" class="btn-secondary whitespace-nowrap" :disabled="uploadingThumb">
+            {{ uploadingThumb ? 'アップロード中...' : '📁 アップロード' }}
+          </button>
+          <input ref="thumbInput" type="file" accept="image/*" class="hidden" @change="uploadThumbnail" />
+        </div>
+        <div v-if="form.imageUrl" class="mt-2 rounded-xl overflow-hidden bg-gray-100 inline-block">
+          <img :src="form.imageUrl" class="max-h-40 max-w-full object-contain rounded-xl" alt="" />
         </div>
       </div>
 
@@ -95,7 +103,72 @@
         <button @click="save" class="btn-primary" :disabled="saving">
           {{ saving ? '保存中...' : (isNew ? '追加する' : '保存する') }}
         </button>
+        <button @click="showPreview = true" class="btn-secondary">👀 プレビュー</button>
         <NuxtLink to="/contents" class="btn-secondary">キャンセル</NuxtLink>
+      </div>
+    </div>
+
+    <!-- プレビューモーダル -->
+    <div v-if="showPreview" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="showPreview = false">
+      <div class="bg-warm-50 rounded-2xl w-full max-w-xl max-h-[85vh] overflow-y-auto shadow-xl">
+        <div class="sticky top-0 flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100 rounded-t-2xl z-10">
+          <div class="flex gap-1">
+            <button
+              @click="previewMode = 'page'"
+              :class="['text-sm px-3 py-1.5 rounded-lg font-medium transition-colors', previewMode === 'page' ? 'bg-peach-500 text-white' : 'text-gray-500 hover:bg-peach-50']"
+            >🌐 公開ページ</button>
+            <button
+              @click="previewMode = 'line'"
+              :class="['text-sm px-3 py-1.5 rounded-lg font-medium transition-colors', previewMode === 'line' ? 'bg-peach-500 text-white' : 'text-gray-500 hover:bg-peach-50']"
+            >💬 LINE表示</button>
+          </div>
+          <button @click="showPreview = false" class="btn-ghost px-3 py-1.5 text-sm">✕ 閉じる</button>
+        </div>
+
+        <!-- 公開ページプレビュー -->
+        <div v-if="previewMode === 'page'" class="px-5 py-6 space-y-4">
+          <p class="text-xs font-medium text-peach-500">📂 {{ form.category || 'カテゴリ未選択' }}</p>
+          <h1 class="text-xl font-bold text-gray-800 leading-snug">{{ form.title || '（タイトル未入力）' }}</h1>
+          <img
+            v-if="form.imageUrl"
+            :src="form.imageUrl"
+            class="w-full rounded-xl object-cover max-h-64"
+            alt=""
+          />
+          <!-- 公開ページと同じ判定: HTML本文はそのまま、プレーンテキストは改行保持 -->
+          <div
+            v-if="isHtmlBody"
+            class="bg-white rounded-xl p-5 shadow-sm text-sm text-gray-700 leading-relaxed rich-body"
+            v-html="form.body || '<span class=\'text-gray-400\'>（本文未入力）</span>'"
+          />
+          <div v-else class="bg-white rounded-xl p-5 shadow-sm text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ form.body || '（本文未入力）' }}</div>
+          <div v-if="form.tags.length" class="flex flex-wrap gap-2 pt-2">
+            <span
+              v-for="tag in form.tags"
+              :key="tag"
+              class="text-xs bg-peach-50 text-peach-600 px-3 py-1 rounded-full border border-peach-100"
+            >#{{ tag }}</span>
+          </div>
+        </div>
+
+        <!-- LINEカードプレビュー（支援情報検索で送られるカード） -->
+        <div v-else class="px-5 py-6">
+          <p class="text-xs text-gray-500 mb-3">LINEで「支援情報を探す」からこのコンテンツが届いたときの見え方です</p>
+          <div class="bg-[#8cabd9] rounded-xl p-4 flex justify-center">
+            <div class="bg-white rounded-2xl overflow-hidden shadow-md w-60">
+              <div class="px-4 pt-4 pb-3">
+                <p class="text-xs text-peach-500">📂 {{ form.category || 'カテゴリ未選択' }}</p>
+                <p class="text-sm font-bold text-gray-800 mt-1.5 leading-snug">{{ form.title || '（タイトル未入力）' }}</p>
+                <p class="text-xs text-gray-500 mt-1.5 leading-relaxed">{{ lineBodyPreview }}</p>
+              </div>
+              <div class="px-3 pb-3">
+                <div class="bg-peach-500 text-white text-sm font-medium text-center py-2.5 rounded-lg">
+                  全文を読む 📖
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -106,17 +179,47 @@ import {
   doc, getDoc, addDoc, updateDoc, collection, getDocs,
   serverTimestamp, orderBy, query,
 } from 'firebase/firestore'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 const route = useRoute()
 const router = useRouter()
-const { db } = useFirebase()
-const config = useRuntimeConfig()
+const { db, storage } = useFirebase()
 
 const id = route.params.id as string
 const isNew = id === 'new'
 const saving = ref(false)
 const masterTags = ref<{ id: string; name: string }[]>([])
 const categories = ref<string[]>([])
+const showPreview = ref(false)
+const previewMode = ref<'page' | 'line'>('page')
+
+// リッチエディタで作成されたHTML本文かどうか（旧プレーンテキスト記事との互換）
+const isHtmlBody = computed(() => /<[a-z][\s\S]*>/i.test(form.value.body))
+
+// LINEカードに表示される本文プレビュー（HTMLタグ除去・60文字）
+const lineBodyPreview = computed(() => {
+  const text = form.value.body.replace(/<[^>]*>/g, '').trim()
+  if (!text) return '（本文未入力）'
+  return text.substring(0, 60) + '…'
+})
+const uploadingThumb = ref(false)
+const thumbInput = ref<HTMLInputElement>()
+
+const uploadThumbnail = async (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  uploadingThumb.value = true
+  try {
+    const sRef = storageRef(storage, `contents/thumbnails/${Date.now()}_${file.name}`)
+    await uploadBytes(sRef, file)
+    form.value.imageUrl = await getDownloadURL(sRef)
+  } catch (err: any) {
+    alert('画像のアップロードに失敗しました: ' + (err?.message ?? String(err)))
+  } finally {
+    uploadingThumb.value = false
+    if (thumbInput.value) thumbInput.value.value = ''
+  }
+}
 
 const form = ref({
   title: '',
@@ -128,10 +231,22 @@ const form = ref({
   tags: [] as string[],
 })
 
-// 既存コンテンツの公開URL（編集時）
+const BASE_URL = 'https://kizuna-project-d7a79.web.app'
+
+// 公開URL（編集時に自動生成URLを表示）
 const publicUrl = computed(() =>
-  isNew ? '' : `${window?.location?.origin ?? 'https://kizuna-project-d7a79.web.app'}/p/${id}`,
+  isNew ? '' : `${(typeof window !== 'undefined' && window.location?.origin) || BASE_URL}/p/${id}`,
 )
+const copied = ref(false)
+const copyUrl = async () => {
+  try {
+    await navigator.clipboard.writeText(publicUrl.value)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    alert('コピーに失敗しました: ' + publicUrl.value)
+  }
+}
 
 const toggleTag = (name: string) => {
   const idx = form.value.tags.indexOf(name)
@@ -144,32 +259,33 @@ const removeTag = (tag: string) => {
 }
 
 const save = async () => {
-  if (!form.value.title.trim() || !form.value.body.trim()) {
+  const bodyText = form.value.body.replace(/<[^>]*>/g, '').trim()
+  if (!form.value.title.trim() || !bodyText) {
     alert('タイトルと本文は必須です')
     return
   }
   saving.value = true
   try {
-    const base = window?.location?.origin ?? 'https://kizuna-project-d7a79.web.app'
     if (isNew) {
       const docRef = await addDoc(collection(db, 'contents'), {
         ...form.value,
-        // リンクURLが空なら公開ページURLを自動設定
-        linkUrl: form.value.linkUrl || '__pending__',
+        linkUrl: '__pending__',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
-      // 生成されたIDで公開URLを上書き
-      if (!form.value.linkUrl) {
-        await updateDoc(docRef, { linkUrl: `${base}/p/${docRef.id}` })
-      }
+      // 生成されたIDで公開URLを自動設定
+      await updateDoc(docRef, { linkUrl: `${BASE_URL}/p/${docRef.id}` })
     } else {
       await updateDoc(doc(db, 'contents', id), {
         ...form.value,
+        // 公開URLは常に自動生成URLに統一
+        linkUrl: `${BASE_URL}/p/${id}`,
         updatedAt: serverTimestamp(),
       })
     }
     router.push('/contents')
+  } catch (err: any) {
+    alert('保存に失敗しました: ' + (err?.message ?? String(err)))
   } finally {
     saving.value = false
   }
@@ -203,3 +319,34 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.rich-body :deep(h3) {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0.75em 0 0.35em;
+  color: #333;
+}
+.rich-body :deep(ul) {
+  list-style: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.rich-body :deep(ol) {
+  list-style: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.rich-body :deep(a) {
+  color: #DC2626;
+  text-decoration: underline;
+  word-break: break-all;
+}
+.rich-body :deep(img) {
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 0.75rem;
+  margin: 0.75em auto;
+  display: block;
+}
+</style>

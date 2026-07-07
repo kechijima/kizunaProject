@@ -39,13 +39,31 @@
         <img
           v-if="content.imageUrl"
           :src="content.imageUrl"
-          class="w-full rounded-xl object-cover max-h-52"
+          class="w-full rounded-xl object-cover max-h-64"
           alt=""
         />
 
-        <div class="bg-white rounded-xl p-5 shadow-sm text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+        <div
+          v-if="isHtmlBody"
+          class="bg-white rounded-xl p-5 shadow-sm text-sm text-gray-700 leading-relaxed rich-body"
+          v-html="content.body"
+        />
+        <div v-else class="bg-white rounded-xl p-5 shadow-sm text-sm text-gray-700 leading-relaxed whitespace-pre-line">
           {{ content.body }}
         </div>
+
+        <!-- 関連リンク（複数対応） -->
+        <a
+          v-for="link in relatedLinks"
+          :key="link"
+          :href="link"
+          target="_blank"
+          rel="noopener"
+          class="block bg-white rounded-xl p-4 shadow-sm border border-peach-100 hover:border-peach-300 transition-colors"
+        >
+          <p class="text-xs text-gray-400 mb-1">🔗 関連リンク</p>
+          <p class="text-sm text-peach-600 underline break-all">{{ link }}</p>
+        </a>
 
         <div v-if="content.tags?.length" class="flex flex-wrap gap-2 pt-2">
           <span
@@ -60,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, increment } from 'firebase/firestore'
 
 definePageMeta({ layout: false, middleware: [] })
 
@@ -71,11 +89,37 @@ const id = route.params.id as string
 const loading = ref(true)
 const content = ref<any>(null)
 
+// リッチエディタで作成されたHTML本文かどうか（旧プレーンテキスト記事との互換）
+const isHtmlBody = computed(() => /<[a-z][\s\S]*>/i.test(content.value?.body ?? ''))
+
+// 関連リンク一覧（複数対応）
+// linkUrls配列があればそれを使用、なければ旧linkUrlから互換取得
+const relatedLinks = computed<string[]>(() => {
+  const body = content.value?.body ?? ''
+  if (Array.isArray(content.value?.linkUrls) && content.value.linkUrls.length > 0) {
+    return content.value.linkUrls.filter((u: string) => u && !body.includes(u))
+  }
+  // 旧データ互換: linkUrlが自動生成でなければ表示
+  const linkUrl = content.value?.linkUrl ?? ''
+  if (
+    linkUrl &&
+    linkUrl !== '__pending__' &&
+    !linkUrl.match(/\/p\/[a-zA-Z0-9]+$/) &&
+    !body.includes(linkUrl)
+  ) {
+    return [linkUrl]
+  }
+  return []
+})
+
 onMounted(async () => {
   try {
-    const snap = await getDoc(doc(db, 'contents', id))
+    const ref = doc(db, 'contents', id)
+    const snap = await getDoc(ref)
     if (snap.exists() && snap.data().status === 'published') {
       content.value = snap.data()
+      // 閲覧数をインクリメント（エラーは無視）
+      updateDoc(ref, { views: increment(1) }).catch(() => {})
     }
   } catch {
     // not found
@@ -84,3 +128,34 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.rich-body :deep(h3) {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0.75em 0 0.35em;
+  color: #333;
+}
+.rich-body :deep(ul) {
+  list-style: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.rich-body :deep(ol) {
+  list-style: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.rich-body :deep(a) {
+  color: #DC2626;
+  text-decoration: underline;
+  word-break: break-all;
+}
+.rich-body :deep(img) {
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 0.75rem;
+  margin: 0.75em auto;
+  display: block;
+}
+</style>

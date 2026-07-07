@@ -43,18 +43,6 @@
         <input v-model="form.imageUrl" type="url" class="input" placeholder="https://..." />
       </div>
 
-      <!-- 対象：お子様の人数 -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">対象：お子様の人数</label>
-        <div class="flex gap-3 flex-wrap">
-          <label v-for="opt in childrenOptions" :key="opt" class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" :value="opt" v-model="form.targetChildren" class="rounded" />
-            {{ opt }}
-          </label>
-        </div>
-        <p class="text-xs text-gray-400 mt-1">LINEでお子様の人数で絞り込む際に使用されます（未選択=全対象）</p>
-      </div>
-
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1.5">ステータス</label>
         <select v-model="form.status" class="input">
@@ -81,8 +69,6 @@ const router = useRouter()
 const { db } = useFirebase()
 const saving = ref(false)
 
-const childrenOptions = ['1人', '2人', '3人以上']
-
 const form = ref({
   title: '',
   startAtStr: '',
@@ -91,7 +77,6 @@ const form = ref({
   description: '',
   linkUrl: '',
   imageUrl: '',
-  targetChildren: [] as string[],
   status: 'draft',
 })
 
@@ -110,7 +95,6 @@ const save = async () => {
       description: form.value.description.trim(),
       linkUrl: form.value.linkUrl.trim(),
       imageUrl: form.value.imageUrl.trim(),
-      targetChildren: form.value.targetChildren,
       status: form.value.status,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
