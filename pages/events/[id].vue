@@ -34,10 +34,17 @@
         <textarea v-model="form.description" class="input resize-none" rows="6" placeholder="イベントの詳細を入力..." />
       </div>
 
+      <!-- 公開URL（自動生成） -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">詳細URL</label>
-        <input v-model="form.linkUrl" type="url" class="input" placeholder="https://..." />
-        <p class="text-xs text-gray-400 mt-1">LINEで配信する際の「詳しく見る」ボタンのリンク先です</p>
+        <label class="block text-sm font-medium text-gray-700 mb-1.5">公開URL</label>
+        <div class="flex items-center gap-2 p-3 bg-peach-50 rounded-xl border border-peach-100">
+          <span class="text-sm text-peach-600 flex-1 truncate">🔗 {{ publicUrl }}</span>
+          <a :href="publicUrl" target="_blank" class="btn-ghost text-xs px-2 py-1 text-gray-500 hover:text-peach-600">開く</a>
+          <button type="button" @click="copyUrl" class="btn-secondary text-xs px-3 py-1 whitespace-nowrap">
+            {{ copied ? '✓ コピー済' : '📋 コピー' }}
+          </button>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">LINEの「詳しく見る」ボタンのリンク先です。参加申し込みもこのページから受け付けます</p>
       </div>
 
       <div>
@@ -64,11 +71,29 @@
         <NuxtLink to="/events" class="btn-secondary">キャンセル</NuxtLink>
       </div>
     </div>
+
+    <!-- 参加申し込み一覧 -->
+    <div v-if="!loading" class="card">
+      <h2 class="section-title">参加申し込み <span class="text-sm text-gray-400 font-normal">{{ applications.length }}件</span></h2>
+      <div v-if="applications.length === 0" class="text-sm text-gray-400 py-4 text-center">
+        まだ申し込みはありません
+      </div>
+      <div v-else class="divide-y divide-gray-50">
+        <div v-for="app in applications" :key="app.id" class="py-3 first:pt-0 last:pb-0">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-medium text-gray-800">{{ app.name }}</p>
+            <p class="text-xs text-gray-400">{{ formatAppDate(app.createdAt) }}</p>
+          </div>
+          <p v-if="app.contact" class="text-xs text-gray-500 mt-0.5">📞 {{ app.contact }}</p>
+          <p v-if="app.message" class="text-sm text-gray-600 mt-1 whitespace-pre-line">{{ app.message }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { doc, getDoc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, serverTimestamp, Timestamp, collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,6 +102,29 @@ const { db } = useFirebase()
 const id = route.params.id as string
 const loading = ref(true)
 const saving = ref(false)
+const applications = ref<any[]>([])
+
+const BASE_URL = 'https://kizuna-project-d7a79.web.app'
+const publicUrl = computed(() =>
+  `${(typeof window !== 'undefined' && window.location?.origin) || BASE_URL}/e/${id}`,
+)
+const copied = ref(false)
+const copyUrl = async () => {
+  try {
+    await navigator.clipboard.writeText(publicUrl.value)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    alert('コピーに失敗しました: ' + publicUrl.value)
+  }
+}
+
+const formatAppDate = (ts: any) => {
+  if (!ts) return ''
+  const d = ts.toDate?.() ?? new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 const toLocalStr = (ts: any): string => {
   if (!ts) return ''
@@ -91,7 +139,6 @@ const form = ref({
   endAtStr: '',
   location: '',
   description: '',
-  linkUrl: '',
   imageUrl: '',
   status: 'draft',
 })
@@ -109,7 +156,8 @@ const save = async () => {
       endAt: form.value.endAtStr ? Timestamp.fromDate(new Date(form.value.endAtStr)) : null,
       location: form.value.location.trim(),
       description: form.value.description.trim(),
-      linkUrl: form.value.linkUrl.trim(),
+      // 公開URLは常に自動生成URLに統一
+      linkUrl: `${BASE_URL}/e/${id}`,
       imageUrl: form.value.imageUrl.trim(),
       status: form.value.status,
       updatedAt: serverTimestamp(),
@@ -130,11 +178,16 @@ onMounted(async () => {
       endAtStr: toLocalStr(data.endAt),
       location: data.location ?? '',
       description: data.description ?? '',
-      linkUrl: data.linkUrl ?? '',
       imageUrl: data.imageUrl ?? '',
       status: data.status ?? 'draft',
     }
   }
   loading.value = false
+
+  // 参加申し込み一覧（リアルタイム）
+  onSnapshot(
+    query(collection(db, 'events', id, 'applications'), orderBy('createdAt', 'desc')),
+    snap => { applications.value = snap.docs.map(d => ({ id: d.id, ...d.data() })) },
+  )
 })
 </script>

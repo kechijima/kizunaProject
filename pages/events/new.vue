@@ -32,10 +32,12 @@
         <textarea v-model="form.description" class="input resize-none" rows="6" placeholder="イベントの詳細を入力..." />
       </div>
 
+      <!-- 公開URL（自動生成） -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">詳細URL</label>
-        <input v-model="form.linkUrl" type="url" class="input" placeholder="https://..." />
-        <p class="text-xs text-gray-400 mt-1">LINEで配信する際の「詳しく見る」ボタンのリンク先です</p>
+        <label class="block text-sm font-medium text-gray-700 mb-1.5">公開URL</label>
+        <div class="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100">
+          <span class="text-xs text-gray-400">保存すると自動でURLが発行されます（LINEの「詳しく見る」ボタンのリンク先になり、参加申し込みも受け付けられます）</span>
+        </div>
       </div>
 
       <div>
@@ -63,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { addDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore'
+import { addDoc, updateDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore'
 
 const router = useRouter()
 const { db } = useFirebase()
@@ -75,10 +77,11 @@ const form = ref({
   endAtStr: '',
   location: '',
   description: '',
-  linkUrl: '',
   imageUrl: '',
   status: 'draft',
 })
+
+const BASE_URL = 'https://kizuna-project-d7a79.web.app'
 
 const save = async () => {
   if (!form.value.title.trim() || !form.value.description.trim()) {
@@ -87,18 +90,20 @@ const save = async () => {
   }
   saving.value = true
   try {
-    await addDoc(collection(db, 'events'), {
+    const docRef = await addDoc(collection(db, 'events'), {
       title: form.value.title.trim(),
       startAt: form.value.startAtStr ? Timestamp.fromDate(new Date(form.value.startAtStr)) : null,
       endAt: form.value.endAtStr ? Timestamp.fromDate(new Date(form.value.endAtStr)) : null,
       location: form.value.location.trim(),
       description: form.value.description.trim(),
-      linkUrl: form.value.linkUrl.trim(),
+      linkUrl: '__pending__',
       imageUrl: form.value.imageUrl.trim(),
       status: form.value.status,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
+    // 生成されたIDで公開URLを自動設定
+    await updateDoc(docRef, { linkUrl: `${BASE_URL}/e/${docRef.id}` })
     router.push('/events')
   } finally {
     saving.value = false

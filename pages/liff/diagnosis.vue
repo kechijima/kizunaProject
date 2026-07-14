@@ -24,7 +24,7 @@
             <span class="text-white text-sm font-bold">絆</span>
           </div>
           <div class="flex-1">
-            <p class="font-bold text-gray-800 text-sm">コンテンツ診断</p>
+            <p class="font-bold text-gray-800 text-sm">{{ headerTitle }}</p>
             <p class="text-xs text-gray-400">質問 {{ currentStep + 1 }} / {{ steps.length }}</p>
           </div>
         </div>
@@ -39,6 +39,11 @@
 
       <div class="flex-1 px-5 py-6 overflow-y-auto">
         <div class="max-w-sm mx-auto">
+          <!-- 画面上部の説明文（管理画面で設定） -->
+          <div v-if="headerText && currentStep === 0" class="bg-peach-50 border border-peach-100 rounded-xl p-4 mb-5">
+            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ headerText }}</p>
+          </div>
+
           <div class="flex items-start gap-3 mb-6">
             <div class="w-10 h-10 bg-peach-100 rounded-full flex items-center justify-center flex-shrink-0">
               <span class="text-xl">📋</span>
@@ -196,6 +201,8 @@ const recommended = ref<Array<{ id: string; title: string; category: string; exc
 const resultConfig = ref<any>(null)
 const resultMessage = ref('')
 const resultUrl = ref('')
+const headerTitle = ref('コンテンツ診断')
+const headerText = ref('')
 
 const toggleOption = (opt: string) => {
   if (steps.value[currentStep.value]?.type === 'multi') {
@@ -281,7 +288,7 @@ const finishDiagnosis = async () => {
         id: d.id,
         title: c.title ?? '',
         category: c.category ?? '',
-        excerpt: (c.body ?? '').substring(0, 50) + ((c.body ?? '').length > 50 ? '…' : ''),
+        excerpt: (() => { const t = String(c.body ?? '').replace(/<[^>]*>/g, '').trim(); return t.substring(0, 50) + (t.length > 50 ? '…' : '') })(),
         linkUrl: (c.linkUrl && c.linkUrl !== '__pending__') ? c.linkUrl : `https://${base}/p/${d.id}`,
         tags: (c.tags ?? []) as string[],
       }
@@ -313,8 +320,11 @@ onMounted(async () => {
       status.value = 'error'
       return
     }
-    steps.value = flowSnap.docs[0].data().steps
-    resultConfig.value = flowSnap.docs[0].data().result ?? null
+    const flowData = flowSnap.docs[0].data()
+    steps.value = flowData.steps
+    resultConfig.value = flowData.result ?? null
+    headerTitle.value = flowData.headerTitle || 'コンテンツ診断'
+    headerText.value = flowData.headerText || ''
 
     // LIFF SDK読み込み（LIFF外ブラウザでも診断自体は動作させる）
     const liffId = config.public.liffDiagnosisId as string

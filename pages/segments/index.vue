@@ -42,6 +42,14 @@
               <span v-for="tag in seg.conditions.anyTags" :key="tag" class="badge badge-gray">{{ tag }}</span>
             </div>
           </div>
+          <div v-if="seg.conditions?.groups?.length" class="text-sm">
+            <span class="text-gray-500 text-xs">タググループ条件（グループ内のいずれか）</span>
+            <div class="flex flex-wrap gap-1 mt-1">
+              <span v-for="gid in seg.conditions.groups" :key="gid" class="badge" :class="groupBadgeClass(gid)">
+                {{ groupName(gid) }}
+              </span>
+            </div>
+          </div>
           <div class="text-xs mt-1">
             <span v-if="seg.conditions?.includeOnboarding" class="badge badge-blue">回答中も含む</span>
             <span v-else class="text-gray-400">完了済みのみ</span>
@@ -142,6 +150,26 @@
             </div>
           </div>
 
+          <!-- タググループ条件 -->
+          <div v-if="tagGroups.length">
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">
+              タググループ条件（グループ内のいずれかのタグを持つユーザー）
+            </label>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="g in tagGroups"
+                :key="g.id"
+                type="button"
+                @click="toggleGroup(g.id)"
+                class="badge text-xs cursor-pointer transition-all"
+                :class="[groupBadgeClass(g.id), newSeg.groups.includes(g.id) ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-60 hover:opacity-100']"
+              >
+                {{ newSeg.groups.includes(g.id) ? '✓ ' : '+ ' }}{{ g.name }}
+              </button>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">複数選択した場合は「各グループから1つ以上のタグを持つ」ユーザーが対象になります</p>
+          </div>
+
           <!-- 回答中を含む（条件に関係なく設定可） -->
           <div class="pt-1 border-t border-gray-100">
             <label class="flex items-center gap-2 cursor-pointer">
@@ -177,6 +205,36 @@ const saving = ref(false)
 const editingId = ref<string | null>(null)
 const segments = ref<any[]>([])
 const masterTags = ref<any[]>([])
+const tagGroups = ref<any[]>([])
+
+// グループの色分けバッジ（タグ管理と同じカラー）
+const groupColorMap: Record<string, string> = {
+  red: 'bg-red-100 text-red-700',
+  orange: 'bg-orange-100 text-orange-700',
+  amber: 'bg-amber-100 text-amber-700',
+  green: 'bg-green-100 text-green-700',
+  blue: 'bg-blue-100 text-blue-700',
+  purple: 'bg-purple-100 text-purple-700',
+  pink: 'bg-pink-100 text-pink-700',
+  gray: 'bg-gray-100 text-gray-600',
+}
+const groupBadgeClass = (gid: string) => {
+  const g = tagGroups.value.find(x => x.id === gid)
+  return groupColorMap[g?.color ?? 'gray'] ?? groupColorMap.gray
+}
+const groupName = (gid: string) => tagGroups.value.find(x => x.id === gid)?.name ?? '（削除済みグループ）'
+
+// グループID → 所属タグ名一覧
+const tagsByGroup = computed<Record<string, string[]>>(() => {
+  const map: Record<string, string[]> = {}
+  masterTags.value.forEach(t => {
+    if (t.groupId) {
+      if (!map[t.groupId]) map[t.groupId] = []
+      map[t.groupId].push(t.name)
+    }
+  })
+  return map
+})
 const counting = ref<Record<string, boolean>>({})
 const matchedUsers = ref<Record<string, any[]>>({})
 const viewingSeg = ref<any>(null)
@@ -189,8 +247,15 @@ const newSeg = ref({
   name: '',
   tags: [] as string[],
   anyTags: [] as string[],
+  groups: [] as string[],
   includeOnboarding: false,
 })
+
+const toggleGroup = (gid: string) => {
+  const idx = newSeg.value.groups.indexOf(gid)
+  if (idx >= 0) newSeg.value.groups.splice(idx, 1)
+  else newSeg.value.groups.push(gid)
+}
 
 function matchSegment(userData: any, conditions: any): boolean {
   // 回答中を含まない場合は完了済みのみ対象
@@ -204,6 +269,15 @@ function matchSegment(userData: any, conditions: any): boolean {
   if (conditions.anyTags?.length) {
     const userTags = userData.tags ?? []
     if (!conditions.anyTags.some((t: string) => userTags.includes(t))) return false
+  }
+
+  // タググループ条件: 各グループから1つ以上のタグを持つこと
+  if (conditions.groups?.length) {
+    const userTags = userData.tags ?? []
+    for (const gid of conditions.groups) {
+      const groupTags = tagsByGroup.value[gid] ?? []
+      if (!groupTags.some((t: string) => userTags.includes(t))) return false
+    }
   }
 
   return true
@@ -229,6 +303,7 @@ const openEdit = (seg: any) => {
     name: seg.name,
     tags: [...(seg.conditions?.tags ?? [])],
     anyTags: [...(seg.conditions?.anyTags ?? [])],
+    groups: [...(seg.conditions?.groups ?? [])],
     includeOnboarding: seg.conditions?.includeOnboarding ?? false,
   }
   showForm.value = true
@@ -237,7 +312,7 @@ const openEdit = (seg: any) => {
 const closeForm = () => {
   showForm.value = false
   editingId.value = null
-  newSeg.value = { name: '', tags: [], anyTags: [], includeOnboarding: false }
+  newSeg.value = { name: '', tags: [], anyTags: [], groups: [], includeOnboarding: false }
 }
 
 const saveSegment = async () => {
@@ -249,6 +324,7 @@ const saveSegment = async () => {
     }
     if (newSeg.value.tags.length) conditions.tags = newSeg.value.tags
     if (newSeg.value.anyTags.length) conditions.anyTags = newSeg.value.anyTags
+    if (newSeg.value.groups.length) conditions.groups = newSeg.value.groups
 
     if (editingId.value) {
       await updateDoc(doc(db, 'segments', editingId.value), {
@@ -279,6 +355,10 @@ const deleteSegment = async (id: string) => {
 onMounted(() => {
   onSnapshot(query(collection(db, 'tags'), orderBy('createdAt', 'asc')), snap => {
     masterTags.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  })
+
+  onSnapshot(query(collection(db, 'tag_groups'), orderBy('createdAt', 'asc')), snap => {
+    tagGroups.value = snap.docs.map(d => ({ id: d.id, ...d.data() }))
   })
 
   onSnapshot(query(collection(db, 'segments'), orderBy('createdAt', 'desc')), snap => {

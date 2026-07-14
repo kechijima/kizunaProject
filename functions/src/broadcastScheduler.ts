@@ -7,7 +7,7 @@ const getLineClient = () => {
   return new messagingApi.MessagingApiClient({ channelAccessToken })
 }
 
-function matchSegment(userData: any, conditions: any): boolean {
+function matchSegment(userData: any, conditions: any, tagsByGroup: Record<string, string[]>): boolean {
   // 「回答中も含む」がオフの場合はオンボーディング完了者のみ対象
   if (!conditions.includeOnboarding && userData.onboardingStatus !== 'completed') return false
 
@@ -23,12 +23,34 @@ function matchSegment(userData: any, conditions: any): boolean {
     if (!hasAny) return false
   }
 
+  // タググループ条件: 各グループから1つ以上のタグを持つこと
+  if (conditions.groups?.length) {
+    const userTags: string[] = userData.tags ?? []
+    for (const gid of conditions.groups) {
+      const groupTags = tagsByGroup[gid] ?? []
+      if (!groupTags.some(t => userTags.includes(t))) return false
+    }
+  }
+
   if (conditions.region) {
     const userRegion = userData.attributes?.region
     if (!userRegion || !userRegion.includes(conditions.region)) return false
   }
 
   return true
+}
+
+async function getTagsByGroup(): Promise<Record<string, string[]>> {
+  const snap = await db.collection('tags').get()
+  const map: Record<string, string[]> = {}
+  snap.docs.forEach(d => {
+    const t = d.data()
+    if (t.groupId) {
+      if (!map[t.groupId]) map[t.groupId] = []
+      map[t.groupId].push(t.name)
+    }
+  })
+  return map
 }
 
 async function getUsersBySegment(segmentId: string): Promise<string[]> {
@@ -38,11 +60,13 @@ async function getUsersBySegment(segmentId: string): Promise<string[]> {
   const segment = segSnap.data()!
   const conditions = segment.conditions ?? {}
 
+  const tagsByGroup = conditions.groups?.length ? await getTagsByGroup() : {}
+
   const snap = await db.collection('users').get()
 
   const userIds: string[] = []
   snap.docs.forEach(d => {
-    if (matchSegment(d.data(), conditions)) {
+    if (matchSegment(d.data(), conditions, tagsByGroup)) {
       userIds.push(d.id)
     }
   })

@@ -14,6 +14,27 @@
       </div>
     </div>
 
+    <!-- 画面上部の文言 -->
+    <div class="card">
+      <h2 class="section-title">診断画面の文言</h2>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">タイトル（ヘッダーに表示）</label>
+          <input v-model="flow.headerTitle" type="text" class="input" placeholder="コンテンツ診断" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">説明文（画面上部に表示）</label>
+          <textarea
+            v-model="flow.headerText"
+            rows="2"
+            class="input"
+            placeholder="例: いくつかの質問に答えると、あなたに合った支援情報をご案内します（1分で完了）"
+          />
+          <p class="text-xs text-gray-400 mt-1">空欄の場合は説明文なしで質問から始まります</p>
+        </div>
+      </div>
+    </div>
+
     <!-- フロー設定 -->
     <div class="card">
       <div class="flex items-center justify-between mb-5">
@@ -253,6 +274,8 @@ const defaultResult = (): ResultConfig => ({
 
 const flow = ref<{
   isActive: boolean
+  headerTitle: string
+  headerText: string
   steps: Array<{
     id: string
     question: string
@@ -265,6 +288,8 @@ const flow = ref<{
   result: ResultConfig
 }>({
   isActive: true,
+  headerTitle: 'コンテンツ診断',
+  headerText: '',
   steps: [
     {
       id: crypto.randomUUID(),
@@ -336,6 +361,8 @@ const saveFlow = async () => {
   try {
     const data = {
       isActive: flow.value.isActive,
+      headerTitle: flow.value.headerTitle.trim() || 'コンテンツ診断',
+      headerText: flow.value.headerText.trim(),
       steps: flow.value.steps,
       result: {
         ...flow.value.result,
@@ -371,6 +398,8 @@ onMounted(async () => {
     flowId = d.id
     const data = d.data()
     flow.value.isActive = data.isActive ?? true
+    flow.value.headerTitle = data.headerTitle ?? 'コンテンツ診断'
+    flow.value.headerText = data.headerText ?? ''
     if (data.steps?.length) flow.value.steps = data.steps
     if (data.result) flow.value.result = { ...defaultResult(), ...data.result }
   }

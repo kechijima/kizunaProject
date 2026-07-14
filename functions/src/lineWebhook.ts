@@ -53,6 +53,9 @@ async function sendNextOnboardingQuestion(client: Client, lineUserId: string, fl
   }
 }
 
+// HTMLタグを除去してプレーンテキスト化（リッチエディタ本文のLINE表示用）
+const stripHtml = (html: any): string => String(html ?? '').replace(/<[^>]*>/g, '').trim()
+
 // ─── 支援情報カテゴリ検索 ────────────────────────
 
 async function handleCategorySearch(event: PostbackEvent, client: Client, category?: string) {
@@ -92,7 +95,7 @@ async function handleCategorySearch(event: PostbackEvent, client: Client, catego
         contents: [
           { type: 'text', text: `📂 ${c.category}`, size: 'xs', color: '#DC2626' },
           { type: 'text', text: c.title, weight: 'bold', size: 'sm', wrap: true, color: '#333333', margin: 'sm' },
-          { type: 'text', text: (c.body ?? '').substring(0, 60) + '…', size: 'xs', wrap: true, color: '#666666', margin: 'sm' },
+          { type: 'text', text: stripHtml(c.body).substring(0, 60) + '…', size: 'xs', wrap: true, color: '#666666', margin: 'sm' },
         ],
       },
       footer: {
@@ -123,7 +126,10 @@ function formatDate(ts: any): string {
 
 function buildEventBubble(d: FirebaseFirestore.QueryDocumentSnapshot): any {
   const ev = d.data()
-  const linkUrl = ev.linkUrl || 'https://kizuna-project-inc.com/'
+  // linkUrl未設定または暫定値の場合はイベント公開ページURLを自動生成
+  const linkUrl = (ev.linkUrl && ev.linkUrl !== '__pending__')
+    ? ev.linkUrl
+    : `https://kizuna-project-d7a79.web.app/e/${d.id}`
   const bodyContents: any[] = [
     { type: 'text', text: '📅 イベント', size: 'xs', color: '#DC2626' },
     { type: 'text', text: ev.title, weight: 'bold', size: 'sm', wrap: true, color: '#333333', margin: 'sm' },
@@ -276,6 +282,7 @@ async function handleFaq(event: PostbackEvent | MessageEvent, client: Client) {
 // ─── Postback（リッチメニューボタン） ───────────
 
 async function handlePostback(event: PostbackEvent, client: Client) {
+  const lineUserId = event.source.userId!
   const params = new URLSearchParams(event.postback.data)
   const action = params.get('action')
 
@@ -332,13 +339,72 @@ async function handlePostback(event: PostbackEvent, client: Client) {
       })
       break
 
-    // 質問・相談（準備中）
+    // 質問・相談 → カテゴリ選択メニュー
     case 'consult':
       await client.replyMessage(event.replyToken, {
         type: 'text',
-        text: '💬 質問・相談機能は現在準備中です。\n公開までもうしばらくお待ちください🙏',
-      })
+        text: '💬 どのようなご用件でしょうか？\n以下から選んでください👇',
+        quickReply: {
+          items: [
+            { type: 'action' as const, action: { type: 'postback' as const, label: '📱 アプリの使い方', data: 'action=consult_cat&cat=howto', displayText: 'アプリの使い方' } },
+            { type: 'action' as const, action: { type: 'postback' as const, label: '💬 チャット/オンライン相談', data: 'action=consult_cat&cat=consult', displayText: 'チャット・オンライン相談' } },
+            { type: 'action' as const, action: { type: 'postback' as const, label: '📰 配信コンテンツ', data: 'action=consult_cat&cat=contents', displayText: '配信コンテンツについて' } },
+            { type: 'action' as const, action: { type: 'postback' as const, label: '📝 その他', data: 'action=consult_cat&cat=other', displayText: 'その他' } },
+          ],
+        },
+      } as TextMessage)
       break
+
+    // 質問・相談のカテゴリ別案内
+    case 'consult_cat': {
+      const cat = params.get('cat') ?? ''
+      switch (cat) {
+        // アプリの使い方
+        case 'howto':
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: '📱 アプリの使い方\n\n画面下のメニューから各機能をご利用いただけます👇\n\n🔍 支援情報を探す：カテゴリを選ぶと支援情報が届きます\n📋 診断：質問に答えると、あなたに合った情報をご案内します\n🌐 公式Webサイト：絆プロジェクトのサイトが開きます\n💬 質問・相談：スタッフへの相談窓口です\n👤 プロフィール変更：登録内容を変更できます\n❓ よくある質問：FAQをご覧いただけます',
+          })
+          break
+
+        // チャット・オンライン相談
+        case 'consult':
+          await db.collection('conversations').doc(lineUserId)
+            .collection('messages').add({
+              text: '【チャット・オンライン相談を希望しています】',
+              type: 'user',
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            })
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: '💬 ご相談を承ります！\n\nこのトークにそのままご相談内容をお送りください。担当者が確認してご返信します😊\n\nオンラインでの相談をご希望の場合は、その旨もあわせてお知らせください。日程を調整いたします。',
+          })
+          break
+
+        // 配信コンテンツ
+        case 'contents':
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: '📰 配信コンテンツについて\n\n最新の支援情報はメニューの「支援情報を探す」からいつでもご覧いただけます🔍\n\n配信内容についてのご質問・ご要望は、このトークにお送りください。',
+          })
+          break
+
+        // その他
+        default:
+          await db.collection('conversations').doc(lineUserId)
+            .collection('messages').add({
+              text: '【その他のお問い合わせを希望しています】',
+              type: 'user',
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            })
+          await client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: '📝 その他のお問い合わせ\n\nこのトークにお問い合わせ内容をお送りください。担当者が確認してご返信します😊',
+          })
+          break
+      }
+      break
+    }
 
     // 診断 → LIFF（コンテンツ診断画面）を案内
     case 'diagnosis': {

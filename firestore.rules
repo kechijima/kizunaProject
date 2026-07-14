@@ -60,6 +60,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // タググループ（管理者のみ）
+    match /tag_groups/{groupId} {
+      allow read, write: if isAdmin();
+    }
+
     // FAQ（管理者のみ書き込み、LINEからも読み取り可）
     match /faqs/{faqId} {
       allow read: if true;
@@ -72,10 +77,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // イベント（管理者のみ書き込み、公開済みのみ公開読み取り可）
+    // イベント（管理者のみ書き込み、公開済み・終了は公開読み取り可）
     match /events/{eventId} {
       allow read, write: if isAdmin();
-      allow read: if resource.data.status == 'published';
+      allow read: if resource.data.status in ['published', 'closed'];
+
+      // 参加申し込み（公開ページから作成可、閲覧・管理は管理者のみ）
+      match /applications/{applicationId} {
+        allow create: if request.resource.data.name is string
+                      && request.resource.data.name.size() > 0
+                      && request.resource.data.name.size() <= 100;
+        allow read, update, delete: if isAdmin();
+      }
     }
 
     // システム設定（管理者のみ）
