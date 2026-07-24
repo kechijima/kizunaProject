@@ -58,12 +58,18 @@
           </div>
         </div>
 
-        <div class="bg-white rounded-xl p-5 shadow-sm text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+        <!-- 説明（リッチHTML本文 / 旧プレーンテキスト互換） -->
+        <div
+          v-if="isHtmlBody"
+          class="bg-white rounded-xl p-5 shadow-sm text-sm text-gray-700 leading-relaxed rich-body"
+          v-html="event.description"
+        />
+        <div v-else class="bg-white rounded-xl p-5 shadow-sm text-sm text-gray-700 leading-relaxed whitespace-pre-line">
           {{ event.description }}
         </div>
 
-        <!-- 参加申し込み -->
-        <div class="bg-white rounded-xl p-5 shadow-sm">
+        <!-- 参加申し込み（applicationEnabledがtrueのときのみ） -->
+        <div v-if="event.applicationEnabled" class="bg-white rounded-xl p-5 shadow-sm">
           <h2 class="font-bold text-gray-800 mb-1">✉️ 参加申し込み</h2>
 
           <div v-if="applied" class="text-center py-6">
@@ -77,22 +83,39 @@
           </div>
 
           <div v-else class="space-y-3 mt-3">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">お名前 <span class="text-red-400">*</span></label>
-              <input v-model="appForm.name" type="text" class="input" placeholder="例: 山田 花子" />
+            <div v-for="field in fields" :key="field.id">
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                {{ field.label }}
+                <span v-if="field.required" class="text-red-400">*</span>
+              </label>
+              <textarea
+                v-if="field.type === 'textarea'"
+                v-model="answers[field.id]"
+                rows="3"
+                class="input resize-none"
+                :placeholder="field.label"
+              />
+              <select
+                v-else-if="field.type === 'select'"
+                v-model="answers[field.id]"
+                class="input"
+              >
+                <option value="">選択してください</option>
+                <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
+              </select>
+              <input
+                v-else
+                v-model="answers[field.id]"
+                :type="field.type === 'tel' ? 'tel' : field.type === 'email' ? 'email' : 'text'"
+                class="input"
+                :placeholder="field.label"
+              />
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">連絡先（電話・メールなど / 任意）</label>
-              <input v-model="appForm.contact" type="text" class="input" placeholder="例: 090-xxxx-xxxx" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">メッセージ（任意）</label>
-              <textarea v-model="appForm.message" rows="3" class="input resize-none" placeholder="質問やご要望があればご記入ください" />
-            </div>
+
             <button
               @click="submitApplication"
               class="btn-primary w-full"
-              :disabled="!appForm.name.trim() || submitting"
+              :disabled="!isValid || submitting"
             >
               {{ submitting ? '送信中...' : '申し込む 🌸' }}
             </button>
@@ -118,8 +141,21 @@ const event = ref<any>(null)
 const applied = ref(false)
 const submitting = ref(false)
 const submitError = ref('')
+const answers = ref<Record<string, string>>({})
 
-const appForm = ref({ name: '', contact: '', message: '' })
+// リッチエディタで作成されたHTML本文かどうか（旧プレーンテキスト互換）
+const isHtmlBody = computed(() => /<[a-z][\s\S]*>/i.test(event.value?.description ?? ''))
+
+// フォーム項目（設定があればそれを、なければ既定の3項目）
+const fields = computed<any[]>(() => {
+  const f = event.value?.applicationFields
+  if (Array.isArray(f) && f.length) return f
+  return [
+    { id: 'name', label: 'お名前', type: 'text', required: true, options: [] },
+    { id: 'contact', label: '連絡先（電話・メールなど）', type: 'text', required: false, options: [] },
+    { id: 'message', label: 'メッセージ', type: 'textarea', required: false, options: [] },
+  ]
+})
 
 // 終了済みイベントは受付終了扱い
 const isClosed = computed(() => {
@@ -128,6 +164,10 @@ const isClosed = computed(() => {
   const start = event.value.startAt?.toDate?.()
   return !!(start && start < new Date())
 })
+
+const isValid = computed(() =>
+  fields.value.every(f => !f.required || (answers.value[f.id] ?? '').trim()),
+)
 
 const formatDate = (ts: any): string => {
   if (!ts) return '日時未定'
@@ -138,14 +178,19 @@ const formatDate = (ts: any): string => {
 }
 
 const submitApplication = async () => {
-  if (!appForm.value.name.trim() || submitting.value) return
+  if (!isValid.value || submitting.value) return
   submitting.value = true
   submitError.value = ''
   try {
+    const answerList = fields.value.map(f => ({
+      label: f.label,
+      value: (answers.value[f.id] ?? '').trim(),
+    }))
     await addDoc(collection(db, 'events', id, 'applications'), {
-      name: appForm.value.name.trim(),
-      contact: appForm.value.contact.trim(),
-      message: appForm.value.message.trim(),
+      // 管理画面の表示・通知用に先頭項目を name にも格納
+      name: answerList[0]?.value ?? '',
+      answers: answerList,
+      eventTitle: event.value?.title ?? '',
       createdAt: serverTimestamp(),
     })
     applied.value = true
@@ -169,3 +214,34 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.rich-body :deep(h3) {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0.75em 0 0.35em;
+  color: #333;
+}
+.rich-body :deep(ul) {
+  list-style: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.rich-body :deep(ol) {
+  list-style: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.rich-body :deep(a) {
+  color: #DC2626;
+  text-decoration: underline;
+  word-break: break-all;
+}
+.rich-body :deep(img) {
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 0.75rem;
+  margin: 0.75em auto;
+  display: block;
+}
+</style>

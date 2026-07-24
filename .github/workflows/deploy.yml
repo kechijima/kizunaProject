@@ -65,6 +65,7 @@ jobs:
           LIFF_ID: ${{ secrets.LIFF_ID }}
           LIFF_PROFILE_ID: ${{ secrets.LIFF_PROFILE_ID }}
           LIFF_DIAGNOSIS_ID: ${{ secrets.LIFF_DIAGNOSIS_ID }}
+          FCM_VAPID_KEY: ${{ secrets.FCM_VAPID_KEY }}
 
       # ── Firebase デプロイ（全リソース） ───────────────────
       - name: Deploy to Firebase

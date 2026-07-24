@@ -83,10 +83,12 @@ service cloud.firestore {
       allow read: if resource.data.status in ['published', 'closed'];
 
       // 参加申し込み（公開ページから作成可、閲覧・管理は管理者のみ）
+      // 申し込みを受け付けるのは applicationEnabled=true のイベントのみ
       match /applications/{applicationId} {
-        allow create: if request.resource.data.name is string
-                      && request.resource.data.name.size() > 0
-                      && request.resource.data.name.size() <= 100;
+        allow create: if get(/databases/$(database)/documents/events/$(eventId)).data.applicationEnabled == true
+                      && request.resource.data.answers is list
+                      && request.resource.data.answers.size() > 0
+                      && request.resource.data.answers.size() <= 20;
         allow read, update, delete: if isAdmin();
       }
     }
@@ -98,6 +100,11 @@ service cloud.firestore {
 
     // 管理者情報（管理者のみ）
     match /admins/{adminId} {
+      allow read, write: if isAdmin();
+    }
+
+    // プッシュ通知トークン（管理者のみ・自身の端末トークンを登録/削除）
+    match /push_tokens/{token} {
       allow read, write: if isAdmin();
     }
   }

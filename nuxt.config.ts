@@ -9,6 +9,10 @@ export default defineNuxtConfig({
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'theme-color', content: '#DC2626' },
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
+        { name: 'apple-mobile-web-app-title', content: '絆プロジェクト' },
       ],
       link: [
         {
@@ -19,6 +23,8 @@ export default defineNuxtConfig({
           rel: 'stylesheet',
           href: 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap',
         },
+        { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'apple-touch-icon', href: '/icons/apple-touch-icon.png' },
       ],
     },
   },
@@ -33,6 +39,7 @@ export default defineNuxtConfig({
       liffId: process.env.LIFF_ID,
       liffProfileId: process.env.LIFF_PROFILE_ID,
       liffDiagnosisId: process.env.LIFF_DIAGNOSIS_ID,
+      fcmVapidKey: process.env.FCM_VAPID_KEY,
     },
   },
   // Windows環境でVite IPC ソケットエラーが発生するため WebSocket HMR を使用

@@ -85,6 +85,7 @@ const settingsItems = [
   { path: '/settings/richmenu', label: 'リッチメニュー', icon: '📱' },
   { path: '/settings/onboarding', label: 'オンボーディング設定', icon: '🔧' },
   { path: '/settings/diagnosis', label: '診断設定', icon: '📋' },
+  { path: '/settings/notifications', label: '通知設定', icon: '🔔' },
   { path: '/settings/admins', label: '管理者設定', icon: '👤' },
 ]
 
